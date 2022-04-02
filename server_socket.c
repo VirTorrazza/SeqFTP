@@ -11,10 +11,20 @@
 #define QUEUE   5      //Número de solicitudes que se pueden encolarF
 #define GOODBYE "Quit recibido"
 char * cquit="QUIT";
+char * cuser="USER";
+char * cpass="PASS";
+char * code530="530";
+char * code230="230";
+char *logged_in="logged in";
+char * elogin= "Login incorrect";
 char * xversion="220 cltFtp 1.0";
+char * code331="331";
+char * rq= "Password required for";
 char server_buffer[256];
 char client_buffer[256];
 char *operations [20];
+char passwd[50];
+char userpiece [50];
 struct sockaddr_in serverAddr;
 struct sockaddr_in clientAddr;
 void check_args(int nargs);//Función para chequear el número de argumentos ingresados
@@ -26,8 +36,19 @@ int connection_accepted(int sd, socklen_t sockt);// Función para aceptar una co
 void clear_buffer(char *buff);//Función para limpiar mi buffer y setear sus valores en 0
 void write_command(int s);//Función de escritura en el socket(Envío)
 void read_command(int s);//Función de lectura en el socket (Recepción)
-int compare_input();//Función para interpretar comandos recibidos por consola
+struct userdata{ //Defino una struct para usuario con nombre y contraseña
+    char *user;
+    char *password;
+};
+void set_structUser(char *usr, char *pass, struct userdata *udata);
+int compare_input(struct userdata *ud);//Función para interpretar comandos recibidos por consola
+void authenticate_data( struct userdata *ud);//Función para corroborar usuario correcto. Setea mi estructura de tipo userdata
+FILE *open_file(char *p);//Función para abrir un archivo
+void close_file(FILE* file);// Función para cerrar un archivo
+char * get_passw(void);
 bool cconnect= true;
+FILE *fpointer;
+
 
 int main(int argc, char* argv[]){
 
@@ -42,7 +63,7 @@ int main(int argc, char* argv[]){
     set_struct(port);
     binding(sd); 
     listening(sd);
-  
+    struct userdata ud;
     
     csd=connection_accepted(sd, size_addr);
     clear_buffer(client_buffer);
@@ -53,14 +74,14 @@ int main(int argc, char* argv[]){
     #ifdef DEBUG
     printf("[+]Se escribe:%s",server_buffer);
     #endif
-    
+    set_structUser("","",&ud);
     while(1){
         clear_buffer(client_buffer);
         read_command(csd);
-        compare_input();
+        
+        int nvar=compare_input(&ud);
         clear_buffer(server_buffer);
-
-        if(compare_input()==0){
+        if(nvar==0){
             printf("Desconectando cliente...\n");
             sprintf(server_buffer, "%s\r\n", GOODBYE);
             write_command(csd);
@@ -71,19 +92,50 @@ int main(int argc, char* argv[]){
     
         }
 
-        else if (compare_input()==1){
+        else if (nvar==1){
             char *error="Código de Error";
             clear_buffer(server_buffer);
             sprintf(server_buffer, "%s\r\n",error);
             write_command(csd);
             
         } 
-        else if (compare_input()==2){
+        else if (nvar==2){
             clear_buffer(server_buffer);
             sprintf(server_buffer, "%s %s %s\r\n", operations[0], TYPES, VERSION);
             write_command(csd);
-        }
+            }
+        else if (nvar==3){
+            clear_buffer(server_buffer);
+            open_file("ftpusers");
+            authenticate_data(&ud);
+            if(ud.user!=NULL){
+                sprintf(server_buffer, "%s %s %s\r\n",code331,rq,ud.user);
+                write_command(csd);
+            }
+            else{
+                clear_buffer(server_buffer);
+                sprintf(server_buffer, "%s %s\r\n",code530,elogin);
+                write_command(csd);
+            }
         
+        }
+        else if (nvar==4){
+                
+            if(ud.password!=NULL){
+                char * aux=get_passw();
+                if(strncmp(aux,ud.password,strlen(ud.password)-1)==0){
+                    clear_buffer(server_buffer);
+                    sprintf(server_buffer,"%s %s %s %s\r\n",code230,"User",ud.user,logged_in);
+                    write_command(csd);
+                }
+
+            }
+            else{
+                clear_buffer(server_buffer);
+                sprintf(server_buffer, "%s %s\r\n",code530,elogin);
+                write_command(csd);
+            }
+        }
     }
 
     
@@ -92,6 +144,7 @@ int main(int argc, char* argv[]){
     return 0;
     
 }
+
 void check_args(int nargs){
 
     if(nargs != 2){
@@ -174,8 +227,9 @@ void read_command(int s){
 	else{
         #ifdef DEBUG
 		printf("[+]Operación de lectura exitosa\n");
-        #endif
-        printf("Recibido <%s\n",client_buffer);
+        printf("Recibido < %s\n",client_buffer);
+        #endif 
+        
 	}
 }
 
@@ -191,18 +245,93 @@ void write_command(int s){
         #endif
 	}
 }
-int compare_input(){
-    int compares=strncasecmp(client_buffer, cquit,strlen(cquit)); //Analizo si se trata del comando quit
+int compare_input(struct userdata *ud){
+    char auxbuffclient[256];
+    sprintf(auxbuffclient,"%s",client_buffer);
+    char * buffpiece=strtok(auxbuffclient, " ");
+    int compares=strncmp(buffpiece, cquit,strlen(cquit)); //Analizo si se trata del comando quit
 		if (compares==0){
         
             return 0;
         }
-        else if(strncasecmp(client_buffer, xversion,strlen(xversion))==0){
+        else if(strncmp(buffpiece, xversion,strlen(xversion))==0){
             
             return 2;
+        }
+        else if(strncmp(buffpiece,cuser,strlen(cuser))==0){
+            return 3;
+            #ifdef DEBUG
+            printf("Comando %s recibido\n",cuser);
+            #endif
+           
+        }
+        else if(strncmp(buffpiece,cpass,strlen(cpass))==0){//Analizo si recibí PASS
+            return 4;
         }
         else{
             printf("Comando  erróneo %s\n",client_buffer);
             return 1;
         }
 }
+
+FILE * open_file( char* path){
+    fpointer=fopen(path,"r");
+    return fpointer;
+}
+
+void close_file(FILE* file){
+    fclose(file);
+}
+
+void authenticate_data(struct userdata * ud){
+    char singleLine[200];
+    char * upiece;
+    char * passpiece;
+    char * pointeraux;
+    int x=100;
+  
+    int var=0;
+    while(!feof(fpointer)){
+        fgets(singleLine,200,fpointer);
+        upiece=strtok(singleLine,":");
+        passpiece=strtok(NULL,"");
+        if(var==0){
+            pointeraux=strtok(client_buffer," ");
+            pointeraux=strtok(NULL,"");
+            var++;
+        }
+
+        strncpy(userpiece,pointeraux,strlen(upiece));
+        x=strncmp(upiece,userpiece,strlen(upiece)-2);
+        if(x==0){
+            set_structUser(userpiece,passwd,ud);
+            sprintf(passwd,"%s",passpiece);
+            break;
+
+        }
+        else{
+            set_structUser(NULL,NULL,ud);
+        }
+    }
+}
+
+
+void set_structUser(char *usr, char *pass, struct userdata *udata){
+    (*udata).user=usr;
+    (*udata).password=pass;
+}
+
+char * get_passw(void){
+    char auxbuffclient[256];
+    sprintf(auxbuffclient,"%s",client_buffer);
+    strtok(auxbuffclient, " ");
+    char * f =strtok(NULL, " ");
+    char * buffpiece = malloc(strlen(f));
+    strncpy(buffpiece,f,strlen(f)-1);//Elimino caracter nulo
+    return buffpiece;
+}
+
+
+
+
+

@@ -7,6 +7,9 @@
 #define VERSION "1.0"//Versión de mi programa
 #define TYPEC "cltFtp" //Nombre/tipo de mi cliente
 #define CODE "220" //Código a enviar
+#define USER "USER" //
+#define CODE331 "331"
+#define PASS "PASS"
 
 struct sockaddr_in clientAddr;//estructura de mi socket cliente
 char server_data[256]; //Tamaño de mi server buffer
@@ -21,6 +24,8 @@ void read_command(int s);//Función para lectura del socket
 void clear_buffer(char *buff);//Función para blanquear el buffer pasado como parámetro en el valor 0
 void print_response(char *buff);//Función para imprimir buffer del servidor(respuesta)
 void get_input(char *operation);//Almaceno operación ingresada por teclado
+void authenticate_data( int s);
+char* verify_datanumber(char * buffer);
 
 int main(int argc,char * argv[]){
 	int  sd; //Creación del socket descriptor
@@ -37,13 +42,15 @@ int main(int argc,char * argv[]){
 	write_command(sd,0);
 	read_command(sd);
 	print_response(server_data);
+	clear_buffer(client_buffer);
+	authenticate_data(sd);
 	
 	while(true){
 		get_input(operation);
-		if (strncasecmp(operation,"quit",strlen(operation))==0){
+		if (strncmp(operation,"QUIT",strlen(operation))==0){
 			write_command(sd,1);
 			read_command(sd);
-			if (strncasecmp(server_data,quitr,strlen(quitr))==0){
+			if (strncmp(server_data,quitr,strlen(quitr))==0){
 				printf("[+]Desconectando...\n");
 				close(sd);
 				break;
@@ -156,4 +163,32 @@ void print_response(char *buff){
 void get_input(char *operation){
 	printf("< ");
 	scanf("%s",operation); //Almaceno lo escrito por teclado
+}
+
+void authenticate_data(int s){
+	char *username [60];
+	char *password [60];
+	char *auxstring;
+	printf("username: ");
+	scanf("%s",username);
+	sprintf(client_buffer,"%s %s\r\n",USER,username);
+	write_command(s,0);
+	read_command(s);
+	//printf("lei %s\n",server_data);
+	auxstring=verify_datanumber(server_data);
+	if (strncmp(auxstring,CODE331,strlen(CODE331))==0){
+		printf("passwd: ");
+		scanf("%s",password);
+		clear_buffer(client_buffer);
+		sprintf(client_buffer,"%s %s\r\n",PASS,password);
+		write_command(s,0);
+		read_command(s);
+		//printf("scribi en el client %s\n",client_buffer);
+		printf("%s\n",server_data);
+		
+	}
+	
+}
+char* verify_datanumber(char * buffer){ //Retorno mi código en string
+	return strtok(buffer, " ");
 }
