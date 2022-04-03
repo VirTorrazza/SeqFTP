@@ -9,9 +9,10 @@
 #define CODE "220" //Código a enviar
 #define USER "USER" //
 #define CODE331 "331"
+#define CODE530 "530"
 #define PASS "PASS"
 
-struct sockaddr_in clientAddr;//estructura de mi socket cliente
+struct sockaddr_in clientAddr;//Estructura de mi socket cliente
 char server_data[256]; //Tamaño de mi server buffer
 char operation [256];
 char client_buffer [256];
@@ -26,6 +27,7 @@ void print_response(char *buff);//Función para imprimir buffer del servidor(res
 void get_input(char *operation);//Almaceno operación ingresada por teclado
 void authenticate_data( int s);
 char* verify_datanumber(char * buffer);
+int state_flag=0;//flag de estado de mi login. 0=login correcto; 1=login incorrecto. 
 
 int main(int argc,char * argv[]){
 	int  sd; //Creación del socket descriptor
@@ -37,15 +39,15 @@ int main(int argc,char * argv[]){
 	sd=create_socket();
 	set_struct(ip,port);//Seteo la estructura del socket
 	establish_connection(sd);//Realizo la conexión del socket
-	clear_buffer (client_buffer);
-	sprintf(client_buffer, "%s %s %s\r\n",CODE,TYPEC,VERSION);
+	clear_buffer(client_buffer);
+	sprintf(client_buffer,"%s %s %s\r\n",CODE,TYPEC,VERSION);
 	write_command(sd,0);
 	read_command(sd);
 	print_response(server_data);
 	clear_buffer(client_buffer);
 	authenticate_data(sd);
 	
-	while(true){
+	while(state_flag==0){
 		get_input(operation);
 		if (strncmp(operation,"QUIT",strlen(operation))==0){
 			write_command(sd,1);
@@ -156,7 +158,7 @@ void read_command(int s){
 }
 
 void print_response(char *buff){
-	printf("El servidor envió: %s\n",buff);
+	printf("%s\n",buff);
 
 }
 
@@ -174,7 +176,6 @@ void authenticate_data(int s){
 	sprintf(client_buffer,"%s %s\r\n",USER,username);
 	write_command(s,0);
 	read_command(s);
-	//printf("lei %s\n",server_data);
 	auxstring=verify_datanumber(server_data);
 	if (strncmp(auxstring,CODE331,strlen(CODE331))==0){
 		printf("passwd: ");
@@ -183,12 +184,21 @@ void authenticate_data(int s){
 		sprintf(client_buffer,"%s %s\r\n",PASS,password);
 		write_command(s,0);
 		read_command(s);
-		//printf("scribi en el client %s\n",client_buffer);
 		printf("%s\n",server_data);
 		
 	}
+    else if(strncmp(auxstring,CODE530,strlen(CODE530))==0){
+        print_response(server_data);
+        state_flag=1;
+        close(s);
+
+    }
+    auxstring=NULL;
+    free(auxstring);
 	
 }
 char* verify_datanumber(char * buffer){ //Retorno mi código en string
-	return strtok(buffer, " ");
+    char *aux=malloc(4);
+    sprintf(aux, "%s",buffer);
+	return strtok(aux, " ");
 }

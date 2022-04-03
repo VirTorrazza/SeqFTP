@@ -8,7 +8,7 @@
 #define TYPES "srvFtp" //Nombre/tipo de mi servidor
 #define TYPEC "cltFtp" //Nombre/tipo de mi cliente
 #define LOCALHOST "127.0.0.1"
-#define QUEUE   5      //Número de solicitudes que se pueden encolarF
+#define QUEUE   5      //Número de solicitudes que se pueden encolar
 #define GOODBYE "Quit recibido"
 char * cquit="QUIT";
 char * cuser="USER";
@@ -49,7 +49,6 @@ char * get_passw(void);
 bool cconnect= true;
 FILE *fpointer;
 
-
 int main(int argc, char* argv[]){
 
     check_args(argc);
@@ -64,7 +63,6 @@ int main(int argc, char* argv[]){
     binding(sd); 
     listening(sd);
     struct userdata ud;
-    
     csd=connection_accepted(sd, size_addr);
     clear_buffer(client_buffer);
     read_command(csd);
@@ -78,11 +76,10 @@ int main(int argc, char* argv[]){
     while(1){
         clear_buffer(client_buffer);
         read_command(csd);
-        
         int nvar=compare_input(&ud);
         clear_buffer(server_buffer);
         if(nvar==0){
-            printf("Desconectando cliente...\n");
+            printf("[+]Desconectando cliente...\n");
             sprintf(server_buffer, "%s\r\n", GOODBYE);
             write_command(csd);
             sleep(1);
@@ -109,13 +106,18 @@ int main(int argc, char* argv[]){
             open_file("ftpusers");
             authenticate_data(&ud);
             if(ud.user!=NULL){
+                clear_buffer(server_buffer);
                 sprintf(server_buffer, "%s %s %s\r\n",code331,rq,ud.user);
                 write_command(csd);
+                
             }
             else{
                 clear_buffer(server_buffer);
                 sprintf(server_buffer, "%s %s\r\n",code530,elogin);
                 write_command(csd);
+                printf("[+]Cerrando conexión del cliente...\n");
+                close(csd);
+                break;
             }
         
         }
@@ -128,21 +130,20 @@ int main(int argc, char* argv[]){
                     sprintf(server_buffer,"%s %s %s %s\r\n",code230,"User",ud.user,logged_in);
                     write_command(csd);
                 }
-
+                free(aux);//Libero el espacio del heap
             }
             else{
                 clear_buffer(server_buffer);
                 sprintf(server_buffer, "%s %s\r\n",code530,elogin);
                 write_command(csd);
+                printf("[+]Cerrando conexión del cliente...\n");
+                close(csd);
+                break; //Finalizo mi bucle
             }
         }
     }
-
-    
     close(sd);
-
     return 0;
-    
 }
 
 void check_args(int nargs){
@@ -227,7 +228,7 @@ void read_command(int s){
 	else{
         #ifdef DEBUG
 		printf("[+]Operación de lectura exitosa\n");
-        printf("Recibido < %s\n",client_buffer);
+        printf("[+]Recibido < %s\n",client_buffer);
         #endif 
         
 	}
@@ -289,7 +290,7 @@ void authenticate_data(struct userdata * ud){
     char * passpiece;
     char * pointeraux;
     int x=100;
-  
+    int flagclose=0; //Flag que me indica si cerré o no el archivo. 0=no;!=0=sí
     int var=0;
     while(!feof(fpointer)){
         fgets(singleLine,200,fpointer);
@@ -300,21 +301,23 @@ void authenticate_data(struct userdata * ud){
             pointeraux=strtok(NULL,"");
             var++;
         }
-
         strncpy(userpiece,pointeraux,strlen(upiece));
         x=strncmp(upiece,userpiece,strlen(upiece)-2);
         if(x==0){
             set_structUser(userpiece,passwd,ud);
             sprintf(passwd,"%s",passpiece);
+            close_file(fpointer);
+            flagclose++;
             break;
-
         }
         else{
-            set_structUser(NULL,NULL,ud);
+            set_structUser(NULL,NULL,ud); 
         }
     }
+    if (flagclose==0){
+        close_file(fpointer);
+    }
 }
-
 
 void set_structUser(char *usr, char *pass, struct userdata *udata){
     (*udata).user=usr;
@@ -330,8 +333,3 @@ char * get_passw(void){
     strncpy(buffpiece,f,strlen(f)-1);//Elimino caracter nulo
     return buffpiece;
 }
-
-
-
-
-
