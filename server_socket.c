@@ -4,17 +4,21 @@
 #include <stdbool.h>//bool types
 #include <string.h>//memset
 #include <unistd.h>//file management
+#include <netinet/in.h>
+#include "server_socket.h"//Librería de funciones de mi servidor
+#include "error.h"//Definición de errores
 #define VERSION "1.0"//Versión de mi programa
 #define TYPES "srvFtp" //Nombre/tipo de mi servidor
 #define TYPEC "cltFtp" //Nombre/tipo de mi cliente
 #define LOCALHOST "127.0.0.1"
 #define QUEUE   5      //Número de solicitudes que se pueden encolar
-#define GOODBYE "Quit recibido"
+#define GOODBYE "Goodbye"
 char * cquit="QUIT";
 char * cuser="USER";
 char * cpass="PASS";
 char * code530="530";
 char * code230="230";
+char * code221="221";
 char *logged_in="logged in";
 char * elogin= "Login incorrect";
 char * xversion="220 cltFtp 1.0";
@@ -27,25 +31,6 @@ char passwd[50];
 char userpiece [50];
 struct sockaddr_in serverAddr;
 struct sockaddr_in clientAddr;
-void check_args(int nargs);//Función para chequear el número de argumentos ingresados
-int create_socket(void);//Función para crear el socket
-void set_struct(char* port);//Función para setear sockaddr_in 
-void binding(int sd);// Función que liga mi socket descriptor al puerto y dirección IP especificada
-void listening(int sd);//Función de listening propia del servidor
-int connection_accepted(int sd, socklen_t sockt);// Función para aceptar una conexión entrante
-void clear_buffer(char *buff);//Función para limpiar mi buffer y setear sus valores en 0
-void write_command(int s);//Función de escritura en el socket(Envío)
-void read_command(int s);//Función de lectura en el socket (Recepción)
-struct userdata{ //Defino una struct para usuario con nombre y contraseña
-    char *user;
-    char *password;
-};
-void set_structUser(char *usr, char *pass, struct userdata *udata);
-int compare_input(struct userdata *ud);//Función para interpretar comandos recibidos por consola
-void authenticate_data( struct userdata *ud);//Función para corroborar usuario correcto. Setea mi estructura de tipo userdata
-FILE *open_file(char *p);//Función para abrir un archivo
-void close_file(FILE* file);// Función para cerrar un archivo
-char * get_passw(void);
 bool cconnect= true;
 FILE *fpointer;
 
@@ -79,8 +64,9 @@ int main(int argc, char* argv[]){
         int nvar=compare_input(&ud);
         clear_buffer(server_buffer);
         if(nvar==0){
+            clear_buffer(server_buffer);
             printf("[+]Desconectando cliente...\n");
-            sprintf(server_buffer, "%s\r\n", GOODBYE);
+            sprintf(server_buffer, "%s %s\r\n",code221,GOODBYE);
             write_command(csd);
             sleep(1);
             shutdown(csd,SHUT_RDWR);
@@ -150,7 +136,7 @@ void check_args(int nargs){
 
     if(nargs != 2){
         perror("[-] Numero incorrecto de argumentos.1 argumento requerido\n");
-        exit(-1);
+        exit(WARG);
     }
 
 }
@@ -158,7 +144,7 @@ int create_socket(void){
 	int sd=socket(AF_INET,SOCK_STREAM,0);//Especificaciones de mi socket TCP
 	if(sd<0){
 		perror("[-]No se pudo crear el socket\n");
-		exit(-1);// código de error -1 que me indica que la imposibilidad de crear el socket
+		exit(SCRN);
 	}
 	else{
         #ifdef DEBUG
@@ -179,7 +165,7 @@ void binding(int sd){
     int bind_stat=bind(sd,(struct sockaddr *)&serverAddr, sizeof(serverAddr));
     if(bind_stat <0){
         perror("[-]Falla en el bind\n");
-        exit(-1);
+        exit(BIND);
     }
     #ifdef DEBUG
     printf("[+] Bind exitoso al puerto\n");
@@ -190,7 +176,7 @@ void listening(int sd){
     int listen_stat=listen(sd,QUEUE);
     if(listen_stat<0){
 		perror("[-]Error en la escucha\n");
-		exit(0);
+		exit(LSTN);
 	}
     else{
         #ifdef DEBUG
@@ -204,12 +190,15 @@ int connection_accepted(int sd,socklen_t sockt){
     int csd=accept(sd,(struct sockaddr *)&clientAddr, &sockt);
     if(csd < 0){
         perror("[-]No se puedo realizar el accept\n");
-        exit(1);
+        exit(ACCT);
     }
     else{
-        #ifdef DEBUG
+        //#ifdef DEBUG
         printf("{+]Accept exitoso\n");
-        #endif
+        char ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET,&(serverAddr.sin_addr),ip,INET_ADDRSTRLEN);
+        printf("[+] Conexión establecida con la ip: %s y el puerto:%d\n",ip,ntohs(serverAddr.sin_port));
+        //#endif
     }
     return csd;
 }
@@ -223,7 +212,7 @@ void read_command(int s){
 	int reads=read(s,client_buffer,sizeof(client_buffer));
 	if(reads==-1){
 		perror("[-]No se pudo recibir el mensaje\n");
-		exit(2);
+		exit(READ);
 	}
 	else{
         #ifdef DEBUG
@@ -238,7 +227,7 @@ void write_command(int s){
 	int write_stat=write(s,server_buffer,sizeof(server_buffer));
 	if(write_stat==-1){
 		perror("[-]No se puede escribir en el socket\n");
-		exit(2);
+		exit(WRTE);
 	}
 	else{
         #ifdef DEBUG
@@ -252,10 +241,9 @@ int compare_input(struct userdata *ud){
     char * buffpiece=strtok(auxbuffclient, " ");
     int compares=strncmp(buffpiece, cquit,strlen(cquit)); //Analizo si se trata del comando quit
 		if (compares==0){
-        
             return 0;
         }
-        else if(strncmp(buffpiece, xversion,strlen(xversion))==0){
+        else if(strncmp(buffpiece, xversion,3)==0){
             
             return 2;
         }
