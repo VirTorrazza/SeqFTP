@@ -10,9 +10,12 @@
 #define TYPEC "cltFtp" //Nombre/tipo de mi cliente
 #define CODE "220" //Código a enviar
 #define USER "USER" //
+#define RETR "RETR" //Código RETR a enviar
 #define CODE331 "331"
 #define CODE530 "530"
 #define PASS "PASS"
+#define GET  "get"
+//#define DEBUG
 
 struct sockaddr_in clientAddr;//Estructura de mi socket cliente
 struct sockaddr_in localAddr;//Estructura de mi cliente local.
@@ -26,6 +29,7 @@ int main(int argc,char * argv[]){
 	char *ip=argv[1];
 	char *port= argv[2];
 	char *quitr="221 Goodbye";
+	char filename [30];
 	
 	check_args(argc);
 	sd=create_socket();
@@ -39,7 +43,7 @@ int main(int argc,char * argv[]){
 	print_response(server_data);
 	clear_buffer(client_buffer);
 	authenticate_data(sd);
-	
+
 	while(state_flag==0){
 		get_input(operation);
 		if (strncmp(operation,"QUIT",strlen(operation))==0){
@@ -52,6 +56,12 @@ int main(int argc,char * argv[]){
 				break;
 			}
 
+		}
+		else if ((strncmp(operation,GET,strlen(GET))==0)) {
+			get_parameter(operation,filename);
+			clear_buffer(client_buffer);
+			sprintf(client_buffer,"%s %s\r\n",RETR,filename);
+			write_command(sd,0);
 		}
 		else{
 			printf("[-]Comando erróneo\n");
@@ -158,7 +168,12 @@ void print_response(char *buff){
 
 void get_input(char *operation){
 	printf("< ");
-	scanf("%s",operation); //Almaceno lo escrito por teclado
+	fgets(operation,256,stdin);
+	substitute_char(operation,'\n','\0');
+
+    //if ((strlen(operation) > 0) && (operation[strlen (operation) - 1] == '\n')){
+      //  operation[strlen (operation) - 1] = '\0';
+	//}
 }
 
 void authenticate_data(int s){
@@ -166,14 +181,22 @@ void authenticate_data(int s){
 	char password [60];
 	char *auxstring;
 	printf("username: ");
-	scanf("%s",username);
+	fgets(username,sizeof(username),stdin);
+	substitute_char(operation,'\n','\0');
+	//if ((strlen(username) > 0) && (username[strlen (username) - 1] == '\n')){
+        //username[strlen (username) - 1] = '\0';
+	//}
 	sprintf(client_buffer,"%s %s\r\n",USER,username);
 	write_command(s,0);
 	read_command(s);
 	auxstring=verify_datanumber(server_data);
 	if (strncmp(auxstring,CODE331,strlen(CODE331))==0){
 		printf("passwd: ");
-		scanf("%s",password);
+		fgets(password,sizeof(password),stdin);
+		substitute_char(operation,'\n','\0');
+		//if ((strlen(password) > 0) && (password[strlen (password) - 1] == '\n')){
+        	//password[strlen (password) - 1] = '\0';
+		//}
 		clear_buffer(client_buffer);
 		sprintf(client_buffer,"%s %s\r\n",PASS,password);
 		write_command(s,0);
@@ -205,4 +228,20 @@ void set_localstruct(int sd){
 	getsockname(sd,(struct sockaddr*)&localAddr,&localsz);
 	printf("[+] Mi puerto es %d\n",ntohs(localAddr.sin_port));
 	//#endif
+}
+
+void get_parameter(char * buff, char *param){ // Función para chequear/obtener comandos escritos
+	char *auxcommand= buff;
+	char *aux2;
+	strtok(auxcommand, " ");
+	aux2=strtok (NULL,"\0");
+	strcpy(param,aux2);
+
+}
+void substitute_char(char *operation, char o, char d){
+
+    if ((strlen(operation) > 0) && (operation[strlen (operation) - 1] ==o)){
+        operation[strlen (operation) - 1] = d;
+
+	}
 }

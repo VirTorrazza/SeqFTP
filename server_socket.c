@@ -13,6 +13,7 @@
 #define LOCALHOST "127.0.0.1"
 #define QUEUE   5      //Número de solicitudes que se pueden encolar
 #define GOODBYE "Goodbye"
+#define DEBUG
 char * cquit="QUIT";
 char * cuser="USER";
 char * cpass="PASS";

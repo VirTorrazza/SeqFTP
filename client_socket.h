@@ -10,3 +10,5 @@ void print_response(char *buff);//Función para imprimir buffer del servidor(res
 void get_input(char *operation);//Almaceno operación ingresada por teclado
 void authenticate_data( int s);
 char* verify_datanumber(char * buffer);
+void get_parameter(char * buff, char *param); //Función para obtener el parámetro de un comando
+void substitute_char( char *operation, char o, char d);//Función para substituir un caracter
