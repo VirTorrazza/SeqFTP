@@ -18,3 +18,5 @@ void authenticate_data( struct userdata *ud);//Función para corroborar usuario 
 FILE *open_file(char *p);//Función para abrir un archivo
 void close_file(FILE* file);// Función para cerrar un archivo
 char * get_passw(void);//Función para obtener el password
+int file_exists(char *p);//Función para chequear si un archivo existe
+void get_parameter(char * buff, char *param);

@@ -13,18 +13,22 @@
 #define LOCALHOST "127.0.0.1"
 #define QUEUE   5      //Número de solicitudes que se pueden encolar
 #define GOODBYE "Goodbye"
-#define DEBUG
+//#define DEBUG
 char * cquit="QUIT";
 char * cuser="USER";
 char * cpass="PASS";
+char * cretr="RETR";
+char * code550="550";
 char * code530="530";
 char * code230="230";
+char * code229="229";
 char * code221="221";
 char *logged_in="logged in";
 char * elogin= "Login incorrect";
 char * xversion="220 cltFtp 1.0";
 char * code331="331";
 char * rq= "Password required for";
+char * notfound=": no such file or directory";
 char server_buffer[256];
 char client_buffer[256];
 char *operations [20];
@@ -39,6 +43,7 @@ int main(int argc, char* argv[]){
 
     check_args(argc);
     int sd;
+    char p[256];
     char * port=argv[1];
     int csd;//Creación del socket del cliente al que se va a escuchar
 	operations[0]="220";
@@ -128,6 +133,27 @@ int main(int argc, char* argv[]){
                 break; //Finalizo mi bucle
             }
         }
+        else if (nvar==5){
+            
+            clear_buffer(p);
+            get_parameter(client_buffer,p);
+            file_exists(p);
+            if (file_exists(p)==0) {
+                clear_buffer(server_buffer);
+                sprintf(server_buffer, "%s %s\r\n",code229,p);
+                write_command(csd);
+
+                //Acá respondo 299 File name size bytes
+            }
+            else{
+                clear_buffer(server_buffer);
+                sprintf(server_buffer, "%s %s %s\r\n",code550,p, notfound);
+                write_command(csd);
+            }
+            
+
+        }
+        
     }
     close(sd);
     return 0;
@@ -258,6 +284,11 @@ int compare_input(struct userdata *ud){
         else if(strncmp(buffpiece,cpass,strlen(cpass))==0){//Analizo si recibí PASS
             return 4;
         }
+        else if(strncmp(buffpiece,cretr,strlen(cretr))==0){ //Analizo si recibí RETR
+            
+            return 5;
+
+        }
         else{
             printf("Comando  erróneo %s\n",client_buffer);
             return 1;
@@ -321,4 +352,20 @@ char * get_passw(void){
     char * buffpiece = malloc(strlen(f));
     strncpy(buffpiece,f,strlen(f)-1);//Elimino caracter nulo
     return buffpiece;
+}
+
+void get_parameter(char * buff, char *param){ 
+	char *auxcommand= buff;
+	char *aux2;
+    memset(param,0,256);
+	strtok(auxcommand, " ");
+	aux2=strtok (NULL,"\0");
+    printf("%ld\n",strlen(aux2));
+	strncpy(param,aux2,strlen(aux2)-2);// Quito /r/n
+
+}
+
+int file_exists(char *p){
+    return (access(p,F_OK));
+
 }

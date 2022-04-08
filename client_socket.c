@@ -11,8 +11,10 @@
 #define CODE "220" //Código a enviar
 #define USER "USER" //
 #define RETR "RETR" //Código RETR a enviar
+#define CODE229 "229"
 #define CODE331 "331"
 #define CODE530 "530"
+#define CODE550 "550"
 #define PASS "PASS"
 #define GET  "get"
 //#define DEBUG
@@ -62,6 +64,16 @@ int main(int argc,char * argv[]){
 			clear_buffer(client_buffer);
 			sprintf(client_buffer,"%s %s\r\n",RETR,filename);
 			write_command(sd,0);
+			read_command(sd);
+			
+			if (strncmp(server_data,CODE550,strlen(CODE550))==0){
+				print_response(server_data);
+			}
+			else if (strncmp(server_data,CODE229,strlen(CODE229))==0){
+				print_response(server_data);
+			}
+			
+
 		}
 		else{
 			printf("[-]Comando erróneo\n");
@@ -171,9 +183,6 @@ void get_input(char *operation){
 	fgets(operation,256,stdin);
 	substitute_char(operation,'\n','\0');
 
-    //if ((strlen(operation) > 0) && (operation[strlen (operation) - 1] == '\n')){
-      //  operation[strlen (operation) - 1] = '\0';
-	//}
 }
 
 void authenticate_data(int s){
@@ -183,9 +192,6 @@ void authenticate_data(int s){
 	printf("username: ");
 	fgets(username,sizeof(username),stdin);
 	substitute_char(operation,'\n','\0');
-	//if ((strlen(username) > 0) && (username[strlen (username) - 1] == '\n')){
-        //username[strlen (username) - 1] = '\0';
-	//}
 	sprintf(client_buffer,"%s %s\r\n",USER,username);
 	write_command(s,0);
 	read_command(s);
@@ -194,9 +200,6 @@ void authenticate_data(int s){
 		printf("passwd: ");
 		fgets(password,sizeof(password),stdin);
 		substitute_char(operation,'\n','\0');
-		//if ((strlen(password) > 0) && (password[strlen (password) - 1] == '\n')){
-        	//password[strlen (password) - 1] = '\0';
-		//}
 		clear_buffer(client_buffer);
 		sprintf(client_buffer,"%s %s\r\n",PASS,password);
 		write_command(s,0);
@@ -210,6 +213,7 @@ void authenticate_data(int s){
         close(s);
 
     }
+	
     auxstring=NULL;
     free(auxstring);
 	
@@ -230,7 +234,7 @@ void set_localstruct(int sd){
 	//#endif
 }
 
-void get_parameter(char * buff, char *param){ // Función para chequear/obtener comandos escritos
+void get_parameter(char * buff, char *param){ 
 	char *auxcommand= buff;
 	char *aux2;
 	strtok(auxcommand, " ");
