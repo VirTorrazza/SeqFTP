@@ -20,3 +20,5 @@ void close_file(FILE* file);// Función para cerrar un archivo
 char * get_passw(void);//Función para obtener el password
 int file_exists(char *p);//Función para chequear si un archivo existe
 void get_parameter(char * buff, char *param);
+long int get_filesize (char *fname);
+

@@ -1,21 +1,23 @@
-#include <stdio.h>//perror,printf
-#include <stdlib.h>//exit
-#include <arpa/inet.h>//socket
-#include <stdbool.h>//bool types
-#include <string.h>//memset
-#include <unistd.h>//file management
+#include <stdio.h>// perror,printf
+#include <stdlib.h>// exit
+#include <arpa/inet.h>// socket
+#include <stdbool.h>// bool types
+#include <string.h>// memset
+#include <unistd.h>// file management
 #include <netinet/in.h>
-#include "server_socket.h"//Librería de funciones de mi servidor
-#include "error.h"//Definición de errores
-#define VERSION "1.0"//Versión de mi programa
-#define TYPES "srvFtp" //Nombre/tipo de mi servidor
-#define TYPEC "cltFtp" //Nombre/tipo de mi cliente
+#include <sys/stat.h> // Utilizada para conocer tamaño de archivos 
+#include "server_socket.h"// Librería de funciones de mi servidor
+#include "error.h"// Definición de errores
+#define VERSION "1.0"// Versión de mi programa
+#define TYPES "srvFtp" // Nombre/tipo de mi servidor
+#define TYPEC "cltFtp" // Nombre/tipo de mi cliente
 #define LOCALHOST "127.0.0.1"
-#define QUEUE   5      //Número de solicitudes que se pueden encolar
+#define QUEUE   5      // Número de solicitudes que se pueden encolar
 #define GOODBYE "Goodbye"
 //#define DEBUG
 char * cquit="QUIT";
 char * cuser="USER";
+char * cport="PORT";
 char * cpass="PASS";
 char * cretr="RETR";
 char * code550="550";
@@ -29,6 +31,9 @@ char * xversion="220 cltFtp 1.0";
 char * code331="331";
 char * rq= "Password required for";
 char * notfound=": no such file or directory";
+char * bytes= "bytes";
+char * nfile= "File";
+char * size ="size";
 char server_buffer[256];
 char client_buffer[256];
 char *operations [20];
@@ -45,7 +50,7 @@ int main(int argc, char* argv[]){
     int sd;
     char p[256];
     char * port=argv[1];
-    int csd;//Creación del socket del cliente al que se va a escuchar
+    int csd;// Creación del socket del cliente al que se va a escuchar
 	operations[0]="220";
     socklen_t size_addr;
     size_addr=sizeof(serverAddr);
@@ -92,7 +97,7 @@ int main(int argc, char* argv[]){
             clear_buffer(server_buffer);
             sprintf(server_buffer, "%s %s %s\r\n", operations[0], TYPES, VERSION);
             write_command(csd);
-            }
+        }
         else if (nvar==3){
             clear_buffer(server_buffer);
             open_file("ftpusers");
@@ -122,7 +127,7 @@ int main(int argc, char* argv[]){
                     sprintf(server_buffer,"%s %s %s %s\r\n",code230,"User",ud.user,logged_in);
                     write_command(csd);
                 }
-                free(aux);//Libero el espacio del heap
+                free(aux);// Libero el espacio del heap
             }
             else{
                 clear_buffer(server_buffer);
@@ -130,7 +135,7 @@ int main(int argc, char* argv[]){
                 write_command(csd);
                 printf("[+]Cerrando conexión del cliente...\n");
                 close(csd);
-                break; //Finalizo mi bucle
+                break; // Finalizo mi bucle
             }
         }
         else if (nvar==5){
@@ -140,10 +145,12 @@ int main(int argc, char* argv[]){
             file_exists(p);
             if (file_exists(p)==0) {
                 clear_buffer(server_buffer);
-                sprintf(server_buffer, "%s %s\r\n",code229,p);
+                long int sizef=get_filesize(p);
+                char *bf [10];
+                sprintf(bf,"%ld",sizef);
+                sprintf(server_buffer,"%s %s %s %s %s %s\r\n",code229,nfile,p,size,bf,bytes);
                 write_command(csd);
 
-                //Acá respondo 299 File name size bytes
             }
             else{
                 clear_buffer(server_buffer);
@@ -152,6 +159,9 @@ int main(int argc, char* argv[]){
             }
             
 
+        }
+        else if (nvar==6){
+            //printf("Recibido %s\n",client_buffer);
         }
         
     }
@@ -168,7 +178,7 @@ void check_args(int nargs){
 
 }
 int create_socket(void){
-	int sd=socket(AF_INET,SOCK_STREAM,0);//Especificaciones de mi socket TCP
+	int sd=socket(AF_INET,SOCK_STREAM,0);// Especificaciones de mi socket TCP
 	if(sd<0){
 		perror("[-]No se pudo crear el socket\n");
 		exit(SCRN);
@@ -183,8 +193,8 @@ int create_socket(void){
 }
 
 void set_struct(char* port){
-    serverAddr.sin_family=AF_INET;//Familia de protocolo Ipv4
-    serverAddr.sin_port= htons(atoi(port));//Puerto para la conexión
+    serverAddr.sin_family=AF_INET;// Familia de protocolo Ipv4
+    serverAddr.sin_port= htons(atoi(port));// Puerto para la conexión
     serverAddr.sin_addr.s_addr = inet_addr(LOCALHOST);
 }
 
@@ -281,13 +291,17 @@ int compare_input(struct userdata *ud){
             #endif
            
         }
-        else if(strncmp(buffpiece,cpass,strlen(cpass))==0){//Analizo si recibí PASS
+        else if(strncmp(buffpiece,cpass,strlen(cpass))==0){// Analizo si recibí PASS
             return 4;
         }
-        else if(strncmp(buffpiece,cretr,strlen(cretr))==0){ //Analizo si recibí RETR
+        else if(strncmp(buffpiece,cretr,strlen(cretr))==0){ // Analizo si recibí RETR
             
             return 5;
 
+        }
+        else if(strncmp(buffpiece,cport,strlen(cport))==0){ // Analizo si recibí PORT
+            printf("entre al port\n");
+            return 6;
         }
         else{
             printf("Comando  erróneo %s\n",client_buffer);
@@ -310,7 +324,7 @@ void authenticate_data(struct userdata * ud){
     char * passpiece;
     char * pointeraux;
     int x=100;
-    int flagclose=0; //Flag que me indica si cerré o no el archivo. 0=no;!=0=sí
+    int flagclose=0; // Flag que me indica si cerré o no el archivo. 0=no;!=0=sí
     int var=0;
     while(!feof(fpointer)){
         fgets(singleLine,200,fpointer);
@@ -350,7 +364,7 @@ char * get_passw(void){
     strtok(auxbuffclient, " ");
     char * f =strtok(NULL, " ");
     char * buffpiece = malloc(strlen(f));
-    strncpy(buffpiece,f,strlen(f)-1);//Elimino caracter nulo
+    strncpy(buffpiece,f,strlen(f)-1);// Elimino caracter nulo
     return buffpiece;
 }
 
@@ -367,5 +381,14 @@ void get_parameter(char * buff, char *param){
 
 int file_exists(char *p){
     return (access(p,F_OK));
+
+}
+
+long int get_filesize(char *fname){// Función para obtener el tamaño de mi archivo
+    struct stat fstatus;
+    if(stat(fname,&fstatus)<0){
+        return WSZE;
+    }
+    return fstatus.st_size;
 
 }

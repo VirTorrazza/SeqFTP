@@ -12,3 +12,6 @@ void authenticate_data( int s);
 char* verify_datanumber(char * buffer);
 void get_parameter(char * buff, char *param); //Función para obtener el parámetro de un comando
 void substitute_char( char *operation, char o, char d);//Función para substituir un caracter
+void convert_ip( char * txt, char replace, char new);
+void convert_port (int port, int *high, int * low);
+void set_datastruct(char* ip,char* port);

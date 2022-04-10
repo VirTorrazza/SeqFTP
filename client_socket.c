@@ -17,10 +17,12 @@
 #define CODE550 "550"
 #define PASS "PASS"
 #define GET  "get"
+#define PORT "PORT"
 //#define DEBUG
 
-struct sockaddr_in clientAddr;//Estructura de mi socket cliente
-struct sockaddr_in localAddr;//Estructura de mi cliente local.
+struct sockaddr_in clientAddr;// Estructura de mi socket cliente
+struct sockaddr_in localAddr;// Estructura de mi cliente local.
+struct sockaddr_in dataAddr;// Estructura de datos
 char server_data[256]; //Tamaño de mi server buffer
 char operation [256];
 char client_buffer [256];
@@ -32,12 +34,19 @@ int main(int argc,char * argv[]){
 	char *port= argv[2];
 	char *quitr="221 Goodbye";
 	char filename [30];
+	int dataFlag=0; 
+	int  sdd; //Creación del socket descriptor para los datos
+	char port_l [10]; // Variable para mi puerto (string)
+	char ipread[16]; // Guardo la ip de mi estructura
+	int high=0;
+	int low=0;
 	
 	check_args(argc);
 	sd=create_socket();
 	set_struct(ip,port);//Seteo la estructura del socket
 	establish_connection(sd);//Realizo la conexión del socket
 	set_localstruct(sd);//Seteo mi estructura local
+	int local_port=ntohs(localAddr.sin_port);
 	clear_buffer(client_buffer);
 	sprintf(client_buffer,"%s %s %s\r\n",CODE,TYPEC,VERSION);
 	write_command(sd,0);
@@ -70,6 +79,7 @@ int main(int argc,char * argv[]){
 				print_response(server_data);
 			}
 			else if (strncmp(server_data,CODE229,strlen(CODE229))==0){
+				dataFlag=1; // Flag para iniciar canal de datos
 				print_response(server_data);
 			}
 			
@@ -78,7 +88,53 @@ int main(int argc,char * argv[]){
 		else{
 			printf("[-]Comando erróneo\n");
 		}
+		
+		if (dataFlag==1){
+			sdd= create_socket();// Creo el socket para datos
+			local_port=local_port +1;
+			sprintf(port_l,"%d",local_port);
+			set_datastruct(ip,port_l);
+			socklen_t data_size= sizeof(dataAddr);
+			if(bind (sdd,(struct sockaddr *)&dataAddr,data_size)<0){
+				perror("[-] Falla en el bind\n");
+				set_datastruct(ip,"0");
+				if(bind (sdd,(struct sockaddr *)&dataAddr,data_size)<0){
+					perror("[-] Falla en el bind\n");
+					exit(SYSF);// Falla del sistema
+				}
+				else{
+					getsockname(sdd, (struct sockaddr *)&dataAddr,&data_size);
+					inet_ntop(AF_INET,&(dataAddr.sin_addr),ipread,INET_ADDRSTRLEN);
+					#ifdef DEBUG
+					printf("[+] Bind exitoso al puerto\n");
+					printf("Mi ip es %s y mi puerto %d\n",ipread,ntohs(dataAddr.sin_port));
+					#endif
+				}
+			}
+			else{
+				getsockname(sdd, (struct sockaddr *)&dataAddr,&data_size);
+				inet_ntop(AF_INET,&(dataAddr.sin_addr),ipread,INET_ADDRSTRLEN);
+				
+				#ifdef DEBUG
+				printf("[+] Bind exitoso al puerto\n");
+				printf("Mi ip es %s y mi puerto %d\n",ipread,ntohs(dataAddr.sin_port));
+				#endif
+			}
+			if (listen(sdd,1)<0){
+				printf("[-]Falla en el listen \n");
+				exit(-1);
+			}
+			local_port=ntohs(dataAddr.sin_port);
+			convert_ip(ipread,'.',','); // Convierto mi ip para enviarla adecuadamente con PORT
+			#if DEBUG
+			printf("Mi ip formateada es: %s\n",ipread);
+			#endif
+			convert_port(local_port,&high,&low);
+			sprintf(client_buffer,"%s %s,%d,%d\r\n",PORT,ipread,high,low);
+			printf("soy severdata: %s\n",client_buffer);
+			write_command(sd,0);
 
+		}
 	}
 	
 	return 0;
@@ -112,6 +168,12 @@ void set_struct(char* ip,char* port){
 	clientAddr.sin_port=htons(atoi(port));//Puerto para la conexión
 	clientAddr.sin_addr.s_addr=inet_addr(ip);//Dirección del cliente
 }
+void set_datastruct(char* ip,char* port){
+	dataAddr.sin_family=AF_INET; //Familia del cliente
+	dataAddr.sin_port=htons(atoi(port));//Puerto para la conexión
+	dataAddr.sin_addr.s_addr=inet_addr(ip);//Dirección del cliente
+}
+
 
 void establish_connection(int sockd){
 	int connect_stat;
@@ -248,4 +310,17 @@ void substitute_char(char *operation, char o, char d){
         operation[strlen (operation) - 1] = d;
 
 	}
+}
+void convert_ip( char * txt, char replace, char new){
+	int stlen= strlen(txt);
+	for (int i=0; i<stlen;i++){
+		if (txt[i]==replace){
+			txt[i]=new;
+		}
+	}
+
+}void convert_port (int port, int *high, int * low){
+	*high=(port >>8) & 0b0000000011111111;
+	*low=(port)& 0b0000000011111111;
+
 }
