@@ -15,3 +15,4 @@ void substitute_char( char *operation, char o, char d);//Función para substitui
 void convert_ip( char * txt, char replace, char new);
 void convert_port (int port, int *high, int * low);
 void set_datastruct(char* ip,char* port);
+int connection_accepted(int sd,socklen_t sockt);

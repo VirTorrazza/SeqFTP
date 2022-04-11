@@ -1,5 +1,6 @@
 #include <stdio.h>// perror,printf
 #include <stdlib.h>// exit
+#include <ctype.h> //inclusión de función is_digit()
 #include <arpa/inet.h>// socket
 #include <stdbool.h>// bool types
 #include <string.h>// memset
@@ -20,11 +21,13 @@ char * cuser="USER";
 char * cport="PORT";
 char * cpass="PASS";
 char * cretr="RETR";
+char * portrcv="Port received";
 char * code550="550";
 char * code530="530";
 char * code230="230";
 char * code229="229";
 char * code221="221";
+char * code200="200";
 char *logged_in="logged in";
 char * elogin= "Login incorrect";
 char * xversion="220 cltFtp 1.0";
@@ -39,8 +42,11 @@ char client_buffer[256];
 char *operations [20];
 char passwd[50];
 char userpiece [50];
+char ip_client[16];
+int  port_client=0;
 struct sockaddr_in serverAddr;
 struct sockaddr_in clientAddr;
+struct sockaddr_in dataAddr;
 bool cconnect= true;
 FILE *fpointer;
 
@@ -48,6 +54,7 @@ int main(int argc, char* argv[]){
 
     check_args(argc);
     int sd;
+    int sddc;
     char p[256];
     char * port=argv[1];
     int csd;// Creación del socket del cliente al que se va a escuchar
@@ -161,7 +168,21 @@ int main(int argc, char* argv[]){
 
         }
         else if (nvar==6){
-            //printf("Recibido %s\n",client_buffer);
+            clear_buffer(server_buffer);
+            sprintf(server_buffer, "%s %s\r\n",code200,portrcv);
+            write_command(csd);
+            convert_iport(ip_client,&port_client,client_buffer);
+            set_datastruct(ip_client,port_client);
+            sddc=create_socket();
+            if(connect(sddc,(struct sockaddr *)&dataAddr,sizeof(dataAddr))<0){
+                printf("[-]Conexión fallida\n");
+                exit(CONN);
+            }
+            
+            printf("[+]Conexión exitosa para Data transfer\n");
+
+
+            
         }
         
     }
@@ -300,7 +321,7 @@ int compare_input(struct userdata *ud){
 
         }
         else if(strncmp(buffpiece,cport,strlen(cport))==0){ // Analizo si recibí PORT
-            printf("entre al port\n");
+            
             return 6;
         }
         else{
@@ -374,7 +395,6 @@ void get_parameter(char * buff, char *param){
     memset(param,0,256);
 	strtok(auxcommand, " ");
 	aux2=strtok (NULL,"\0");
-    printf("%ld\n",strlen(aux2));
 	strncpy(param,aux2,strlen(aux2)-2);// Quito /r/n
 
 }
@@ -391,4 +411,62 @@ long int get_filesize(char *fname){// Función para obtener el tamaño de mi arc
     }
     return fstatus.st_size;
 
+}
+void convert_iport(char *ip, int *port, char* buffer){
+    buffer=buffer+5;
+    char porthigh[5];
+    char portlow [5];
+    int high;
+    int low;
+    int i=0;
+    memset(porthigh,0,sizeof(porthigh));
+    memset(portlow,0,sizeof(portlow));
+    int comnumb=0;// Número de comas
+    while(comnumb<4){
+        if(*buffer != ','/*isdigit(*buffer)==0*/){
+            *ip=*buffer;
+            
+        }
+        else{
+            comnumb++;
+            *ip='.';
+        }
+        ip++;
+        buffer++;
+    }
+    *(ip -1)='\0';
+    comnumb=0;
+    //buffer++;
+    while(*buffer!= '\r'){
+        if(*buffer!=','){
+            if (comnumb==0) {
+                porthigh[i]=*buffer;
+                i++;
+                buffer++;
+            }
+            else{
+                portlow[i]=*buffer;
+                i++;
+                buffer++;
+            }
+        } else{
+            buffer++;
+            comnumb++;
+            i=0;
+        }
+
+    }
+    high=atoi(porthigh);
+    low=atoi(portlow);
+    high= high<<8;
+    (*port)=high + low;
+
+    //printf("El contenido de port es: %d\n",*port);
+    
+
+}
+void set_datastruct(char* ip, int port){
+    dataAddr.sin_family=AF_INET;// Familia de protocolo Ipv4
+    dataAddr.sin_port= htons(port);// Puerto para la conexión
+    dataAddr.sin_addr.s_addr = inet_addr(ip);
 }

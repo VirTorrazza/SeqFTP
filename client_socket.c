@@ -11,6 +11,7 @@
 #define CODE "220" //Código a enviar
 #define USER "USER" //
 #define RETR "RETR" //Código RETR a enviar
+#define CODE200 "200"
 #define CODE229 "229"
 #define CODE331 "331"
 #define CODE530 "530"
@@ -131,8 +132,15 @@ int main(int argc,char * argv[]){
 			#endif
 			convert_port(local_port,&high,&low);
 			sprintf(client_buffer,"%s %s,%d,%d\r\n",PORT,ipread,high,low);
-			printf("soy severdata: %s\n",client_buffer);
 			write_command(sd,0);
+			printf("Envio %s\n",client_buffer);
+			read_command(sd);
+			if(strncmp(server_data,CODE200,3)==0){
+				//printf("Soy puerto %d\n",ntohs(dataAddr.sin_port));
+				int sdds=connection_accepted(sdd,data_size); // Creo mi sd de datos del servidor
+				
+			}
+			
 
 		}
 	}
@@ -323,4 +331,16 @@ void convert_ip( char * txt, char replace, char new){
 	*high=(port >>8) & 0b0000000011111111;
 	*low=(port)& 0b0000000011111111;
 
+}
+int connection_accepted(int sd,socklen_t sockt){
+    printf("[+]Esperando conexión...\n");
+    int csd=accept(sd,(struct sockaddr *)&dataAddr, &sockt);
+    if(csd < 0){
+        perror("[-]No se puedo realizar el accept\n");
+        exit(ACCT);
+    }
+    else{
+        printf("{+]Accept exitoso\n");
+	}
+	return csd;
 }
