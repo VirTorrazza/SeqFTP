@@ -8,4 +8,5 @@
 #define ACCT -8 // Error en la realización del accept
 #define WSZE -9 // Error de tamaño de archivo
 #define SYSF -10 //Error del sistema
+#define FWRT -11 //Error en la escritura del archivo
 

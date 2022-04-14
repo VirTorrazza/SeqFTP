@@ -23,3 +23,5 @@ void get_parameter(char * buff, char *param);
 long int get_filesize (char *fname);
 void convert_iport(char *ip, int *port, char* buffer);// Función para reconvertir mi ip y puerto
 void set_datastruct(char* ip, int port); //Seteo mi estructura de datos
+int get_bytessize(char *buff);// Función para obtener los bytes de mi archivo
+void write_file(int sddc , FILE *fpointer, long int sz);

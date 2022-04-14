@@ -12,6 +12,7 @@
 #define USER "USER" //
 #define RETR "RETR" //Código RETR a enviar
 #define CODE200 "200"
+#define CODE226 "226"
 #define CODE229 "229"
 #define CODE331 "331"
 #define CODE530 "530"
@@ -28,6 +29,7 @@ char server_data[256]; //Tamaño de mi server buffer
 char operation [256];
 char client_buffer [256];
 int state_flag=0;//Flag de estado de mi login. 0=login correcto; 1=login incorrecto. 
+char auxfuera [256];
 
 int main(int argc,char * argv[]){
 	int  sd; //Creación del socket descriptor
@@ -41,7 +43,9 @@ int main(int argc,char * argv[]){
 	char ipread[16]; // Guardo la ip de mi estructura
 	int high=0;
 	int low=0;
+	long int bytesz=0;
 	
+
 	check_args(argc);
 	sd=create_socket();
 	set_struct(ip,port);//Seteo la estructura del socket
@@ -55,7 +59,8 @@ int main(int argc,char * argv[]){
 	print_response(server_data);
 	clear_buffer(client_buffer);
 	authenticate_data(sd);
-
+	
+	
 	while(state_flag==0){
 		get_input(operation);
 		if (strncmp(operation,"QUIT",strlen(operation))==0){
@@ -82,9 +87,9 @@ int main(int argc,char * argv[]){
 			else if (strncmp(server_data,CODE229,strlen(CODE229))==0){
 				dataFlag=1; // Flag para iniciar canal de datos
 				print_response(server_data);
+				bytesz=get_bytessize(server_data);
 			}
 			
-
 		}
 		else{
 			printf("[-]Comando erróneo\n");
@@ -133,12 +138,19 @@ int main(int argc,char * argv[]){
 			convert_port(local_port,&high,&low);
 			sprintf(client_buffer,"%s %s,%d,%d\r\n",PORT,ipread,high,low);
 			write_command(sd,0);
-			printf("Envio %s\n",client_buffer);
+			//printf("Envio %s\n",client_buffer);
 			read_command(sd);
 			if(strncmp(server_data,CODE200,3)==0){
-				//printf("Soy puerto %d\n",ntohs(dataAddr.sin_port));
 				int sdds=connection_accepted(sdd,data_size); // Creo mi sd de datos del servidor
-				
+				read_file(sdds,filename,bytesz);
+				read_command(sd); // Leo final de transferencia
+				if (strncmp(server_data,CODE226,strlen(CODE226))==0){ // Me indica transferencia exitosa
+					print_response(server_data);
+				}
+				else{
+					perror("[-] Transferencia fallida\n");
+				}
+
 			}
 			
 
@@ -147,6 +159,7 @@ int main(int argc,char * argv[]){
 	
 	return 0;
 }
+
 
 void check_args(int nargs){
 
@@ -284,24 +297,20 @@ void authenticate_data(int s){
 
     }
 	
-    auxstring=NULL;
-    free(auxstring);
-	
 }
+
 char* verify_datanumber(char * buffer){ //Retorno mi código en string
-    char *aux=malloc(4);
-    sprintf(aux, "%s",buffer);
-	return strtok(aux, " ");
+    sprintf(auxfuera, "%s",buffer);
+	return strtok(auxfuera, " ");
 }
+
 void set_localstruct(int sd){
     localAddr.sin_family=AF_INET;
     localAddr.sin_port=htons(0);
     localAddr.sin_addr.s_addr=INADDR_ANY;
-	//#ifdef DEBUG
 	socklen_t localsz=sizeof(localAddr);
 	getsockname(sd,(struct sockaddr*)&localAddr,&localsz);
-	printf("[+] Mi puerto es %d\n",ntohs(localAddr.sin_port));
-	//#endif
+	//printf("[+] Mi puerto es %d\n",ntohs(localAddr.sin_port));S
 }
 
 void get_parameter(char * buff, char *param){ 
@@ -327,20 +336,73 @@ void convert_ip( char * txt, char replace, char new){
 		}
 	}
 
-}void convert_port (int port, int *high, int * low){
+}
+
+void convert_port (int port, int *high, int * low){
 	*high=(port >>8) & 0b0000000011111111;
 	*low=(port)& 0b0000000011111111;
 
 }
 int connection_accepted(int sd,socklen_t sockt){
-    printf("[+]Esperando conexión...\n");
     int csd=accept(sd,(struct sockaddr *)&dataAddr, &sockt);
     if(csd < 0){
         perror("[-]No se puedo realizar el accept\n");
         exit(ACCT);
     }
     else{
+		#ifdef DEBUG
         printf("{+]Accept exitoso\n");
+		#endif
 	}
 	return csd;
+}
+
+void read_file(int sdds, char *filename,long int bsize){// Copio el archivo
+	int nbr;
+	FILE * fp;
+	fp=fopen(filename,"wb");
+	if (fp==NULL){
+		perror("[-] Error en la escritura\n");
+		exit(WRTE);
+	}
+	long int aux22=0;
+	long int auxsz=bsize;
+	while(1){
+		if(auxsz>=512){
+			nbr=read(sdds,server_data,512);
+		}
+		else{
+			if(auxsz != 0){
+			nbr=read(sdds,server_data,auxsz+1);
+			}
+		}
+		
+		if(nbr==-1){
+			break;
+		}
+		fprintf(fp, "%s",server_data);
+		memset(server_data,0,sizeof(server_data));
+		aux22=aux22+nbr;
+		if(auxsz<=0) break;
+		auxsz=auxsz-nbr;
+		
+	}
+	#ifdef DEBUG
+	printf("[+]Escritura exitosa\n");
+	#endif
+	fclose(fp); // Cierro el archivo
+
+}
+
+
+int get_bytessize(char *buff){
+	char buffaux[256];
+	sprintf(buffaux, "%s",buff);
+	strtok(buffaux, " ");
+	strtok(NULL, " ");
+	strtok(NULL, " ");
+	strtok(NULL, " ");
+	char * aux=strtok(NULL, " ");
+	int nsize=atoi(aux);
+	return nsize;
 }

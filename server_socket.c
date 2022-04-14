@@ -26,6 +26,7 @@ char * code550="550";
 char * code530="530";
 char * code230="230";
 char * code229="229";
+char * code226="226";
 char * code221="221";
 char * code200="200";
 char *logged_in="logged in";
@@ -34,6 +35,7 @@ char * xversion="220 cltFtp 1.0";
 char * code331="331";
 char * rq= "Password required for";
 char * notfound=": no such file or directory";
+char * transfer= "Transfer complete";
 char * bytes= "bytes";
 char * nfile= "File";
 char * size ="size";
@@ -43,6 +45,7 @@ char *operations [20];
 char passwd[50];
 char userpiece [50];
 char ip_client[16];
+char filename [50];
 int  port_client=0;
 struct sockaddr_in serverAddr;
 struct sockaddr_in clientAddr;
@@ -154,6 +157,9 @@ int main(int argc, char* argv[]){
                 clear_buffer(server_buffer);
                 long int sizef=get_filesize(p);
                 char *bf [10];
+                
+                memset(filename,0,strlen(filename));
+                sprintf(filename,"%s",p);
                 sprintf(bf,"%ld",sizef);
                 sprintf(server_buffer,"%s %s %s %s %s %s\r\n",code229,nfile,p,size,bf,bytes);
                 write_command(csd);
@@ -178,11 +184,16 @@ int main(int argc, char* argv[]){
                 printf("[-]Conexión fallida\n");
                 exit(CONN);
             }
-            
+            #ifdef DEBUG
             printf("[+]Conexión exitosa para Data transfer\n");
-
-
-            
+            #endif
+            fpointer=fopen(p,"rb");
+            long int sizef=get_filesize(p);
+            write_file(sddc,fpointer,sizef);
+            memset(server_buffer,0, sizeof(server_buffer));
+            sprintf(server_buffer, "%s %s\r\n",code226,transfer);
+            write_command(csd);
+    
         }
         
     }
@@ -251,12 +262,12 @@ int connection_accepted(int sd,socklen_t sockt){
         exit(ACCT);
     }
     else{
-        //#ifdef DEBUG
+        #ifdef DEBUG
         printf("{+]Accept exitoso\n");
         char ip[INET_ADDRSTRLEN];
         inet_ntop(AF_INET,&(serverAddr.sin_addr),ip,INET_ADDRSTRLEN);
         printf("[+] Conexión establecida con la ip: %s y el puerto:%d\n",ip,ntohs(serverAddr.sin_port));
-        //#endif
+        #endif
     }
     return csd;
 }
@@ -436,7 +447,6 @@ void convert_iport(char *ip, int *port, char* buffer){
     }
     *(ip -1)='\0';
     comnumb=0;
-    //buffer++;
     while(*buffer!= '\r'){
         if(*buffer!=','){
             if (comnumb==0) {
@@ -460,8 +470,6 @@ void convert_iport(char *ip, int *port, char* buffer){
     low=atoi(portlow);
     high= high<<8;
     (*port)=high + low;
-
-    //printf("El contenido de port es: %d\n",*port);
     
 
 }
@@ -469,4 +477,35 @@ void set_datastruct(char* ip, int port){
     dataAddr.sin_family=AF_INET;// Familia de protocolo Ipv4
     dataAddr.sin_port= htons(port);// Puerto para la conexión
     dataAddr.sin_addr.s_addr = inet_addr(ip);
+}
+
+void write_file(int sddc , FILE *fpointer, long int sz){
+    char data[512]={0};
+    while(sz>=0){
+        if(sz <=512){
+            while(fread(data,1,sz,fpointer)!=NULL){
+                if (write(sddc,data,sz)<0){
+                    perror("[-] Error al escribir el archivo\n");
+                    exit(FWRT);
+                }
+                memset(data,0,sizeof(data));
+            }
+            sz=-1;
+        }
+        else{
+            
+            while(fread(data,1,512,fpointer)!=NULL){
+                if (write(sddc,data,sizeof(data))<0){
+                    perror("[-] Error al escribir el archivo\n");
+                    exit(FWRT);
+                }
+                memset(data,0,sizeof(data));
+            }
+            sz=sz -512;
+            if(sz<0){
+                sz=512+sz;
+            }
+            
+        }
+    }
 }
