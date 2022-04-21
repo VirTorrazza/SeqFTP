@@ -1,3 +1,4 @@
+//#include <ncurses.h> // getch(), similar a <conio.h> de MS-DOS
 #include <stdio.h>//perror,printf
 #include <stdlib.h>//exit
 #include <arpa/inet.h>//socket
@@ -20,6 +21,9 @@
 #define PASS "PASS"
 #define GET  "get"
 #define PORT "PORT"
+#define ENTER 13
+#define TAB 9
+#define BKSP 8
 //#define DEBUG
 
 struct sockaddr_in clientAddr;// Estructura de mi socket cliente
@@ -30,6 +34,19 @@ char operation [256];
 char client_buffer [256];
 int state_flag=0;//Flag de estado de mi login. 0=login correcto; 1=login incorrecto. 
 char auxfuera [256];
+
+#include <termios.h>
+#include <unistd.h>
+int getch() {
+	struct termios oldt, newt;
+	int ch;
+	tcgetattr(STDIN_FILENO, &oldt);
+	newt = oldt;
+	newt.c_lflag &= ~(ICANON | ECHO); tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+	ch = getchar();
+	tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	return ch;
+}
 
 int main(int argc,char * argv[]){
 	int  sd; //Creación del socket descriptor
@@ -270,7 +287,7 @@ void get_input(char *operation){
 
 void authenticate_data(int s){
 	char username [60];
-	char password [60];
+	char password [20];
 	char *auxstring;
 	printf("username: ");
 	fgets(username,sizeof(username),stdin);
@@ -281,12 +298,17 @@ void authenticate_data(int s){
 	auxstring=verify_datanumber(server_data);
 	if (strncmp(auxstring,CODE331,strlen(CODE331))==0){
 		printf("passwd: ");
-		fgets(password,sizeof(password),stdin);
+		write_password(password,sizeof(password)); //Función para escribir el password
 		substitute_char(operation,'\n','\0');
 		clear_buffer(client_buffer);
 		sprintf(client_buffer,"%s %s\r\n",PASS,password);
 		write_command(s,0);
 		read_command(s);
+		auxstring=verify_datanumber(server_data);
+		if(strncmp(auxstring,CODE530,strlen(CODE530))==0) {
+			state_flag=1;
+			close(s);
+		}
 		printf("%s\n",server_data);
 		
 	}
@@ -405,4 +427,31 @@ int get_bytessize(char *buff){
 	char * aux=strtok(NULL, " ");
 	int nsize=atoi(aux);
 	return nsize;
+}
+
+void write_password( char * pass, int s){
+	
+	char character;
+	int i =0; 
+	while( (character = getch()) ){
+		if(character ==10){ //Retorno de carro (CR)
+			pass[i]='\0';
+			printf("\n");
+			break;
+		}
+		else if (character== 127){ //Retroceso (BS)
+			if(i>0){
+				i--;
+				printf("\b \b");
+			}
+
+		}else{
+			if(i <s){
+				printf("*");
+				pass[i]=character;
+				i++;
+			}
+		}
+	}
+
 }

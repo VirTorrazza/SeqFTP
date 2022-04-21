@@ -18,3 +18,4 @@ void set_datastruct(char* ip,char* port);
 int connection_accepted(int sd,socklen_t sockt);
 int get_bytessize(char *buff);// Función para obtener los bytes de mi archivo
 void read_file(int sdds, char *filename,long int bsize);
+void write_password( char * pass, int s);

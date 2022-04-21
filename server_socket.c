@@ -22,7 +22,7 @@ char * cport="PORT";
 char * cpass="PASS";
 char * cretr="RETR";
 char * portrcv="Port received";
-char * code550="550";
+char code550[4]="550";
 char * code530="530";
 char * code230="230";
 char * code229="229";
@@ -34,7 +34,7 @@ char * elogin= "Login incorrect";
 char * xversion="220 cltFtp 1.0";
 char * code331="331";
 char * rq= "Password required for";
-char * notfound=": no such file or directory";
+char  notfound [28]=": no such file or directory";
 char * transfer= "Transfer complete";
 char * bytes= "bytes";
 char * nfile= "File";
@@ -45,7 +45,7 @@ char *operations [20];
 char passwd[50];
 char userpiece [50];
 char ip_client[16];
-char filename [50];
+char filename [200];
 int  port_client=0;
 struct sockaddr_in serverAddr;
 struct sockaddr_in clientAddr;
@@ -58,7 +58,7 @@ int main(int argc, char* argv[]){
     check_args(argc);
     int sd;
     int sddc;
-    char p[256];
+    char p[200];
     char * port=argv[1];
     int csd;// Creación del socket del cliente al que se va a escuchar
 	operations[0]="220";
@@ -85,6 +85,7 @@ int main(int argc, char* argv[]){
         int nvar=compare_input(&ud);
         clear_buffer(server_buffer);
         if(nvar==0){
+            again: //Etiqueta para mi cláusula goto
             clear_buffer(server_buffer);
             printf("[+]Desconectando cliente...\n");
             sprintf(server_buffer, "%s %s\r\n",code221,GOODBYE);
@@ -123,8 +124,8 @@ int main(int argc, char* argv[]){
                 sprintf(server_buffer, "%s %s\r\n",code530,elogin);
                 write_command(csd);
                 printf("[+]Cerrando conexión del cliente...\n");
-                close(csd);
-                break;
+                goto again;
+                
             }
         
         }
@@ -137,6 +138,14 @@ int main(int argc, char* argv[]){
                     sprintf(server_buffer,"%s %s %s %s\r\n",code230,"User",ud.user,logged_in);
                     write_command(csd);
                 }
+                else{
+                    clear_buffer(server_buffer);
+                    sprintf(server_buffer, "%s %s\r\n",code530,elogin);
+                    write_command(csd);
+                    printf("[+]Cerrando conexión del cliente...\n");
+                    goto again;
+
+                }
                 free(aux);// Libero el espacio del heap
             }
             else{
@@ -144,8 +153,7 @@ int main(int argc, char* argv[]){
                 sprintf(server_buffer, "%s %s\r\n",code530,elogin);
                 write_command(csd);
                 printf("[+]Cerrando conexión del cliente...\n");
-                close(csd);
-                break; // Finalizo mi bucle
+                goto again;
             }
         }
         else if (nvar==5){
@@ -156,7 +164,7 @@ int main(int argc, char* argv[]){
             if (file_exists(p)==0) {
                 clear_buffer(server_buffer);
                 long int sizef=get_filesize(p);
-                char *bf [10];
+                char bf [10];
                 
                 memset(filename,0,strlen(filename));
                 sprintf(filename,"%s",p);
@@ -197,6 +205,8 @@ int main(int argc, char* argv[]){
         }
         
     }
+
+
     close(sd);
     return 0;
 }
@@ -483,7 +493,7 @@ void write_file(int sddc , FILE *fpointer, long int sz){
     char data[512]={0};
     while(sz>=0){
         if(sz <=512){
-            while(fread(data,1,sz,fpointer)!=NULL){
+            while(fread(data,1,sz,fpointer)!=(long int)NULL){
                 if (write(sddc,data,sz)<0){
                     perror("[-] Error al escribir el archivo\n");
                     exit(FWRT);
@@ -494,7 +504,7 @@ void write_file(int sddc , FILE *fpointer, long int sz){
         }
         else{
             
-            while(fread(data,1,512,fpointer)!=NULL){
+            while(fread(data,1,512,fpointer)!=(long int)NULL){
                 if (write(sddc,data,sizeof(data))<0){
                     perror("[-] Error al escribir el archivo\n");
                     exit(FWRT);
