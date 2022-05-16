@@ -1,10 +1,10 @@
-//#include <ncurses.h> // getch(), similar a <conio.h> de MS-DOS
 #include <stdio.h>//perror,printf
 #include <stdlib.h>//exit
 #include <arpa/inet.h>//socket
 #include <stdbool.h>//bool types
 #include <string.h>//memset
 #include <unistd.h>//file management
+#include <sys/stat.h>//stat
 #include "client_socket.h"//Librería de funciones de mi cliente
 #include "error.h"//Definición de errores
 #define VERSION "1.0"//Versión de mi programa
@@ -12,14 +12,26 @@
 #define CODE "220" //Código a enviar
 #define USER "USER" //
 #define RETR "RETR" //Código RETR a enviar
+#define NLST "NLST"
+#define CWD  "CWD"
+#define MKD  "MKD"
+#define RMD  "RMD"
 #define CODE200 "200"
 #define CODE226 "226"
 #define CODE229 "229"
+#define CODE250 "250"
+#define CODE257 "257"
 #define CODE331 "331"
+#define CODE431 "431"
+#define CODE521 "521"
 #define CODE530 "530"
 #define CODE550 "550"
 #define PASS "PASS"
 #define GET  "get"
+#define DIR  "dir"
+#define CD	 "cd"
+#define MKDIR "mkdir"
+#define RMDIR "rmdir"
 #define PORT "PORT"
 #define ENTER 13
 #define TAB 9
@@ -34,6 +46,9 @@ char operation [256];
 char client_buffer [256];
 int state_flag=0;//Flag de estado de mi login. 0=login correcto; 1=login incorrecto. 
 char auxfuera [256];
+struct stat statf;
+char* temp;
+FILE * filep;
 
 #include <termios.h>
 #include <unistd.h>
@@ -108,11 +123,71 @@ int main(int argc,char * argv[]){
 			}
 			
 		}
+		else if ((strncmp(operation,DIR,strlen(DIR))==0)) {
+			sprintf(filename,"%s","cmd.tmp");
+			clear_buffer(client_buffer);
+			sprintf(client_buffer,"%s\r\n",NLST);
+			write_command(sd,0);
+			read_command(sd);
+			if (strncmp(server_data,CODE550,strlen(CODE550))==0){
+				print_response(server_data);
+			}
+			else if (strncmp(server_data,CODE229,strlen(CODE229))==0){
+				dataFlag=2; // Flag para iniciar canal de datos
+				print_response(server_data);
+				bytesz=get_bytessize(server_data);
+			}
+			
+		}
+		else if ((strncmp(operation,CD,strlen(CD))==0)) {
+			get_parameter(operation,filename);
+			clear_buffer(client_buffer);
+			sprintf(client_buffer,"%s %s\r\n", CWD, filename);
+			write_command(sd,0);
+			read_command(sd);
+			if (strncmp(server_data,CODE200,strlen(CODE200))==0){ //200 directory changed
+				print_response(server_data);
+			}
+			else if (strncmp(server_data,CODE431,strlen(CODE431))==0){ //431 No such directory
+				print_response(server_data);
+			}
+		
+		} 
+		else if ((strncmp(operation,MKDIR,strlen(MKDIR))==0)){
+			
+			get_parameter(operation,filename);
+			clear_buffer(client_buffer);
+			sprintf(client_buffer,"%s %s\r\n", MKD, filename);
+			write_command(sd,0);
+			read_command(sd);
+			if (strncmp(server_data,CODE257,strlen(CODE257))==0){ //257 "/usr/dm/pathname" directory created
+				print_response(server_data);
+			}
+			else if (strncmp(server_data,CODE521,strlen(CODE521))==0){ //521 taking no action.
+				print_response(server_data);
+			}
+
+		}
+		else if ((strncmp(operation,RMDIR,strlen(RMDIR))==0)){
+			
+			get_parameter(operation,filename);
+			clear_buffer(client_buffer);
+			sprintf(client_buffer,"%s %s\r\n", RMD, filename);
+			write_command(sd,0);
+			read_command(sd);
+			if (strncmp(server_data,CODE250,strlen(CODE250))==0){ //250 remove directory
+				print_response(server_data);
+			}
+			else if (strncmp(server_data,CODE521,strlen(CODE521))==0){ //521 taking no action.
+				print_response(server_data);
+			}
+
+		}
 		else{
 			printf("[-]Comando erróneo\n");
 		}
 		
-		if (dataFlag==1){
+		if (dataFlag==1 || dataFlag==2){
 			sdd= create_socket();// Creo el socket para datos
 			local_port=local_port +1;
 			sprintf(port_l,"%d",local_port);
@@ -155,7 +230,6 @@ int main(int argc,char * argv[]){
 			convert_port(local_port,&high,&low);
 			sprintf(client_buffer,"%s %s,%d,%d\r\n",PORT,ipread,high,low);
 			write_command(sd,0);
-			//printf("Envio %s\n",client_buffer);
 			read_command(sd);
 			if(strncmp(server_data,CODE200,3)==0){
 				int sdds=connection_accepted(sdd,data_size); // Creo mi sd de datos del servidor
@@ -163,13 +237,31 @@ int main(int argc,char * argv[]){
 				read_command(sd); // Leo final de transferencia
 				if (strncmp(server_data,CODE226,strlen(CODE226))==0){ // Me indica transferencia exitosa
 					print_response(server_data);
+					
+					if(dataFlag == 2){	
+						filep = fopen("cmd.tmp","r");
+
+						if(stat("cmd.tmp", &statf) == -1) {
+							perror("Error\n");
+						}
+
+						temp = malloc(statf.st_size);
+						fread(temp, statf.st_size, 1, filep);
+						printf("%s\n", temp);
+						fclose(filep);
+						free(temp);
+						// Elimino el archivo temporal
+						if(remove("cmd.tmp")!=0){
+							perror("Error\n");
+						}
+					}
 				}
 				else{
 					perror("[-] Transferencia fallida\n");
 				}
 
 			}
-			
+			dataFlag=0;
 
 		}
 	}

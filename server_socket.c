@@ -21,14 +21,23 @@ char * cuser="USER";
 char * cport="PORT";
 char * cpass="PASS";
 char * cretr="RETR";
+char * cnlst="NLST";
+char * ccwd="CWD";
+char * cmkd="MKD";
+char * crmd="RMD";
 char * portrcv="Port received";
 char code550[4]="550";
 char * code530="530";
+char * code521="521";
+char * code431="431";
+char * code257="257";
+char * code250="250";
 char * code230="230";
 char * code229="229";
 char * code226="226";
 char * code221="221";
 char * code200="200";
+char * twopoint="..";
 char *logged_in="logged in";
 char * elogin= "Login incorrect";
 char * xversion="220 cltFtp 1.0";
@@ -36,6 +45,11 @@ char * code331="331";
 char * rq= "Password required for";
 char  notfound [28]=": no such file or directory";
 char * transfer= "Transfer complete";
+char * cdok= "directory changed";
+char * mkok= "directory created";
+char * rmok= "remove directory";
+char * cderror= "no such directory";
+char * mkerror= "taking no action";
 char * bytes= "bytes";
 char * nfile= "File";
 char * size ="size";
@@ -46,6 +60,7 @@ char passwd[50];
 char userpiece [50];
 char ip_client[16];
 char filename [200];
+
 int  port_client=0;
 struct sockaddr_in serverAddr;
 struct sockaddr_in clientAddr;
@@ -53,15 +68,21 @@ struct sockaddr_in dataAddr;
 bool cconnect= true;
 FILE *fpointer;
 
+
 int main(int argc, char* argv[]){
 
     check_args(argc);
     int sd;
     int sddc;
-    char p[200];
+    char p[250];
     char * port=argv[1];
     int csd;// Creación del socket del cliente al que se va a escuchar
-	operations[0]="220";
+	long int sizef;
+    char bf [10];
+    char auxstr[150];
+    char command[200];
+    int cantc;
+    operations[0]="220";
     socklen_t size_addr;
     size_addr=sizeof(serverAddr);
     sd=create_socket();
@@ -69,6 +90,9 @@ int main(int argc, char* argv[]){
     binding(sd); 
     listening(sd);
     struct userdata ud;
+    char path[150];
+    memset(path, 0 , sizeof(path));
+    set_int_path(path);
     csd=connection_accepted(sd, size_addr);
     clear_buffer(client_buffer);
     read_command(csd);
@@ -163,8 +187,8 @@ int main(int argc, char* argv[]){
             file_exists(p);
             if (file_exists(p)==0) {
                 clear_buffer(server_buffer);
-                long int sizef=get_filesize(p);
-                char bf [10];
+                sizef=get_filesize(p);
+                
                 
                 memset(filename,0,strlen(filename));
                 sprintf(filename,"%s",p);
@@ -202,6 +226,83 @@ int main(int argc, char* argv[]){
             sprintf(server_buffer, "%s %s\r\n",code226,transfer);
             write_command(csd);
     
+        }
+        else if (nvar==7){
+            
+            memset(command, 0 , sizeof(command));
+            sprintf(command,"ls -l %s > cmd.tmp", path);
+            system(command);
+            memset(filename,0,strlen(filename));
+            sprintf(filename, "%s", "cmd.tmp");
+            sprintf(p, "%s", "cmd.tmp");
+            sizef=get_filesize("cmd.tmp");
+            memset(bf, 0, sizeof(bf));
+            sprintf(bf,"%ld",sizef);
+            sprintf(server_buffer,"%s %s %s %s %s %s\r\n",code229,nfile,p,size,bf,bytes);
+            write_command(csd);
+        }
+        else if (nvar==8){
+            clear_buffer(p);
+            get_parameter(client_buffer,p); //extrae el parametro
+                                        
+            if(strncmp(p, twopoint, 2) == 0){
+                char * auxch = strrchr(path, '/');
+                cantc=auxch - path;
+                memset(auxstr, 0 , sizeof(auxstr));
+                memset(path, 0 , sizeof(path));
+                strncpy(auxstr, path, cantc);
+                sprintf(path, "%s", auxstr);
+            }else{
+                sprintf(path, "%s/%s", path, p);
+            }
+
+            memset(command, 0 , sizeof(command));
+            sprintf(command,"cd %s", path);
+
+            if(system(command) == 0){//200 directory changed
+                memset(server_buffer, 0, sizeof(server_buffer));
+                sprintf(server_buffer,"%s %s\r\n",code200,cdok);
+                write_command(csd);
+            }else{//431 No such directory
+                memset(server_buffer, 0, sizeof(server_buffer));
+                sprintf(server_buffer,"%s %s\r\n",code431,cderror);
+                write_command(csd);                                
+            }
+                
+        }
+        else if (nvar==9){
+            clear_buffer(p);
+            get_parameter(client_buffer,p); //extrae el parametro
+            
+            memset(command, 0 , sizeof(command));
+            sprintf(command,"mkdir %s/%s", path, p);
+            
+            if(system(command) == 0){//257 "/usr/dm/pathname" directory created
+                memset(server_buffer, 0, sizeof(server_buffer));
+                sprintf(server_buffer,"%s %s %s\r\n",code257,p,mkok);
+                write_command(csd);
+            }else{//521 taking no action.
+                memset(server_buffer, 0, sizeof(server_buffer));
+                sprintf(server_buffer,"%s %s\r\n",code521,mkerror);
+                write_command(csd);                                
+            }
+        }
+        else if (nvar==10){
+            clear_buffer(p);
+            get_parameter(client_buffer,p); //extrae el parametro
+            
+            memset(command, 0 , sizeof(command));
+            sprintf(command,"rmdir %s/%s", path, p);
+            
+            if(system(command) == 0){//250 remove directory
+                memset(server_buffer, 0, sizeof(server_buffer));
+                sprintf(server_buffer,"%s %s %s\r\n",code250,p,rmok);
+                write_command(csd);
+            }else{//521 taking no action.
+                memset(server_buffer, 0, sizeof(server_buffer));
+                sprintf(server_buffer,"%s %s\r\n",code521,mkerror);
+                write_command(csd);                                
+            }
         }
         
     }
@@ -344,6 +445,22 @@ int compare_input(struct userdata *ud){
         else if(strncmp(buffpiece,cport,strlen(cport))==0){ // Analizo si recibí PORT
             
             return 6;
+        }
+        else if(strncmp(buffpiece,cnlst,strlen(cnlst))==0){ // Analizo si recibí NLST
+            
+            return 7;
+        }
+        else if(strncmp(buffpiece,ccwd,strlen(ccwd))==0){ // Analizo si recibí CWD
+            
+            return 8;
+        }
+        else if(strncmp(buffpiece,cmkd,strlen(cmkd))==0){ // Analizo si recibí MKD
+            
+            return 9;
+        }
+        else if(strncmp(buffpiece,crmd,strlen(crmd))==0){ // Analizo si recibí RMD
+            
+            return 10;
         }
         else{
             printf("Comando  erróneo %s\n",client_buffer);
@@ -518,4 +635,25 @@ void write_file(int sddc , FILE *fpointer, long int sz){
             
         }
     }
+}
+
+void set_int_path(char * s){ // Función para identificar mi path inicial
+    system("pwd > cmd.tmp");
+    FILE * auxfp = fopen("cmd.tmp", "r");
+
+    struct stat statf;
+    if(stat("cmd.tmp", &statf) == -1) {
+        perror("Error: stat");
+    }
+    
+    char* auxfile = malloc(statf.st_size);
+    fread(auxfile, statf.st_size, 1, auxfp);
+
+    if ((strlen(auxfile) != 0) && (auxfile[strlen (auxfile) - 1] == '\n')){
+        auxfile[strlen (auxfile) - 1] = '\0';
+    }
+    
+    sprintf(s, "%s", auxfile);
+    fclose(auxfp);
+    free(auxfile);
 }
